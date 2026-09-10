@@ -1,0 +1,40 @@
+/* Ontogeny -- domain-to-schema form + generated-doc iframe */
+
+.ontogeny-app {
+  padding: 12px 20px;
+}
+
+.site-hero .tagline {
+  color: #666;
+  margin-top: -4px;
+}
+
+.ontogeny-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 520px;
+  margin-bottom: 16px;
+}
+
+.ontogeny-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9em;
+}
+
+.ontogeny-form textarea {
+  min-height: 60px;
+}
+
+.ontogeny-error {
+  color: #b00020;
+  margin-bottom: 12px;
+}
+
+.ontogeny-doc {
+  width: 100%;
+  height: 80vh;
+  border: 1px solid #ddd;
+}

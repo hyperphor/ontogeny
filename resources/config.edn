@@ -1,0 +1,13 @@
+;;; Way config. Profiles: :dev :server :default (see hyperphor.way.config).
+
+{:app-title "Ontogeny"
+ :dev-mode #profile {:dev true :default false}
+ :app-main "hyperphor.ontogeny.frontend.core.init"
+ :port #env PORT
+ :css ["/css/ontogeny.css"]
+
+ ;; ANTHROPIC_API_KEY / OPENAI_API_KEY are read directly by com.hyperphor/ellum
+ ;; (see hyperphor.ellum.providers.{anthropic,openai}) -- nothing app-specific
+ ;; to configure here. No :basic-auth-creds / :oauth yet -- no auth, no
+ ;; persistence, nothing to protect beyond rate-limiting the LLM key.
+ }
