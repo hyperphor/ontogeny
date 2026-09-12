@@ -32,11 +32,24 @@
 ;; The model is inconsistent from call to call about whether it fences its
 ;; answer at all (confirmed empirically against both providers), so handle
 ;; both shapes ourselves rather than trust either helper's contract alone.
-(defn- read-edn-response
-  [content]
-  (if-let [[value] (llme/extract-clojure content)]
-    value
-    (read-string content)))
+;;; → ellum
+(defn extract-clojure
+  [s]
+  (try                                  ;TODO pull out into macro → way
+    (let [[type code text] (llme/extract-code s)]
+      (cond (or (= type :clojure) (= type :edn))
+            [(read-string code) text]         ;TODO safety
+            (nil? type)
+            (when-let [e (read-string s)]
+              [e ""])))
+    (catch Exception e
+      (throw (ex-info "Clojure extract failure" {:s s})))))
+
+(defn extract-clojure-code
+  [s]
+  (-> s
+      extract-clojure
+      first))
 
 ;;; Phase 1: enumerate the kinds (entity types) for the domain before writing any fields.
 ;;; This forces the model to think about the full entity model first, so phase 2 can
@@ -48,10 +61,16 @@ Include not just the main entities but also supporting types that are often lazi
 Return ONLY a Clojure map (no prose) of keyword kind-names to brief description strings.
 Example: {:Fossil \"A preserved specimen\" :AnatomicalPart \"A body part or skeletal element\" :Taxon \"A taxonomic unit\"}")]
     (-> (llm/query provider query :system system-prompt :model model)
-        read-edn-response)))
+        extract-clojure-code)))
 
 ;;; Phase 2: generate full field definitions, with the kinds list in context so the model
 ;;; knows what reference types are available and uses them instead of :string.
+
+(def trapped (atom nil))
+(defn trap [x]
+  (reset! trapped x)
+  x)
+
 (defn- generate-schema-from-kinds
   [domain kinds-map extra provider model]
   (let [kinds-list (str/join ", " (map name (keys kinds-map)))
@@ -63,10 +82,12 @@ IMPORTANT: whenever a field represents a concept that exists as a kind in the li
                                :system system-prompt
                                :messages [{:role :user :content query}
                                           {:role :user :content (str "kinds with descriptions: " (pr-str kinds-map))}
-                                          {:role :user :content (str "example schema format: " (sample-schema-text))}]}
+                                          {:role :user :content (str "example schema format: " (sample-schema-text))}]
+                               :max-tokens 120000} ;TODO this might be model-dependent, works for Anthropic default
                         model (assoc :model model)))
         :content
-        read-edn-response)))
+        trap
+        extract-clojure-code)))
 
 (defn sgen
   "Generate an Alzabo schema (a Clojure map, not written to disk) for
@@ -78,4 +99,5 @@ IMPORTANT: whenever a field represents a concept that exists as a kind in the li
   subtype/extends relations."
   [domain & {:keys [extra provider model] :or {extra "" provider default-provider}}]
   (let [kinds-map (generate-kinds domain extra provider model)]
+    (prn :kinds kinds-map)
     (generate-schema-from-kinds domain kinds-map extra provider model)))

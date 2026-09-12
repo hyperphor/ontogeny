@@ -24,7 +24,8 @@
      [:option {:value "openai"} "OpenAI"]]]
    [:button {:disabled (= status :pending)
              :on-click #(rf/dispatch [:ontogeny/generate])}
-    (if (= status :pending) "Generating… (kinds, then fields, then rendering — usually 30-60s)" "Generate schema")]])
+     (if (= status :pending) "Generating… (kinds, then fields, then rendering — usually 30-60s)" "Generate schema")]
+   "Can take a couple of minutes, be patient"])
 
 (defn app-ui
   []
