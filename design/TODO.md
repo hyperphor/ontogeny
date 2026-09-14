@@ -1,3 +1,16 @@
+# ontogeny.hyperphor.com not working
+
+Even though https://ontogeny-c6752993a720.herokuapp.com/ is. 
+
+Maybe I screwed up the DNS?
+
+Ah http://ontogeny.hyperphor.com/ works, the https: form doesnt
+
+
+# Doesn't work at all on heroku
+
+Because it writes files and that is always a stretch.
+I've figured this out before, you can write temp files I think.
 
 # Persistence
 

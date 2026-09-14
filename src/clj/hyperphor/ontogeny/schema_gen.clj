@@ -8,9 +8,11 @@
   instead of a repo-relative path that only resolved inside alzabo itself."
   (:require [clojure.string :as str]
             [clojure.java.io :as io]
+            [taoensso.timbre :as log]
             [hyperphor.multitool.core :as u]
             [hyperphor.ellum.core :as llm]
-            [hyperphor.ellum.extract :as llme]))
+            [hyperphor.ellum.extract :as llme]
+            [hyperphor.ontogeny.paths :as paths]))
 
 (def default-provider :anthropic)
 
@@ -51,6 +53,23 @@
       extract-clojure
       first))
 
+;; On any failure calling or parsing an LLM response, dump everything known
+;; about the transaction -- the request sent, and whatever the exception's
+;; ex-data carried (extract-clojure's :s raw response text, or a hato HTTP
+;; error's :status/:body/:headers) -- to a local file, and log a pointer to
+;; it. Local storage here is fine even though Heroku's filesystem is
+;; transient (see paths.clj): the point is to survive past the single
+;; stack-trace line handler.clj otherwise surfaces, not past a dyno
+;; restart -- `heroku logs` shows the dump path, `heroku run cat <path>`
+;; (or a follow-up request while the dyno's still up) retrieves it.
+(defn- dump-failure!
+  [phase domain request e]
+  (let [file (paths/failure-file (str (System/currentTimeMillis) "-" (name phase) ".edn"))]
+    (io/make-parents file)
+    (spit file (pr-str {:phase phase :domain domain :request request
+                         :message (ex-message e) :data (ex-data e)}))
+    (log/error e "LLM transaction failed for" phase domain "-- dumped to" (str file))))
+
 ;;; Phase 1: enumerate the kinds (entity types) for the domain before writing any fields.
 ;;; This forces the model to think about the full entity model first, so phase 2 can
 ;;; use reference types instead of lazily falling back to :string.
@@ -59,35 +78,38 @@
   (let [query (u/tx "List all significant entity types (kinds) needed for a {{domain}} domain schema. {{extra}}
 Include not just the main entities but also supporting types that are often lazily represented as strings — things like anatomical parts, material types, classifications, controlled vocabularies, etc. that benefit from being first-class entities with their own attributes.
 Return ONLY a Clojure map (no prose) of keyword kind-names to brief description strings.
-Example: {:Fossil \"A preserved specimen\" :AnatomicalPart \"A body part or skeletal element\" :Taxon \"A taxonomic unit\"}")]
-    (-> (llm/query provider query :system system-prompt :model model)
-        extract-clojure-code)))
+Example: {:Fossil \"A preserved specimen\" :AnatomicalPart \"A body part or skeletal element\" :Taxon \"A taxonomic unit\"}")
+        request (cond-> {:provider provider
+                         :system system-prompt
+                         :messages [{:role :user :content query}]}
+                  model (assoc :model model))]
+    (try
+      (-> (llm/complete request) :content extract-clojure-code)
+      (catch Exception e
+        (dump-failure! :kinds domain request e)
+        (throw e)))))
 
 ;;; Phase 2: generate full field definitions, with the kinds list in context so the model
 ;;; knows what reference types are available and uses them instead of :string.
-
-(def trapped (atom nil))
-(defn trap [x]
-  (reset! trapped x)
-  x)
-
 (defn- generate-schema-from-kinds
   [domain kinds-map extra provider model]
   (let [kinds-list (str/join ", " (map name (keys kinds-map)))
         query (u/tx "Create a complete Alzabo schema for the {{domain}} domain using exactly these kinds: {{kinds-list}}.
 For each kind, define its fields with :type, :cardinality (when :many), :doc, and for string fields :examples with 2-3 representative values.
 IMPORTANT: whenever a field represents a concept that exists as a kind in the list above, use a reference type (the kind keyword) rather than :string.
-{{extra}}")]
-    (-> (llm/complete (cond-> {:provider provider
-                               :system system-prompt
-                               :messages [{:role :user :content query}
-                                          {:role :user :content (str "kinds with descriptions: " (pr-str kinds-map))}
-                                          {:role :user :content (str "example schema format: " (sample-schema-text))}]
-                               :max-tokens 120000} ;TODO this might be model-dependent, works for Anthropic default
-                        model (assoc :model model)))
-        :content
-        trap
-        extract-clojure-code)))
+{{extra}}")
+        request (cond-> {:provider provider
+                         :system system-prompt
+                         :messages [{:role :user :content query}
+                                    {:role :user :content (str "kinds with descriptions: " (pr-str kinds-map))}
+                                    {:role :user :content (str "example schema format: " (sample-schema-text))}]
+                         :max-tokens 120000} ;TODO this might be model-dependent, works for Anthropic default
+                  model (assoc :model model))]
+    (try
+      (-> (llm/complete request) :content extract-clojure-code)
+      (catch Exception e
+        (dump-failure! :schema domain request e)
+        (throw e)))))
 
 (defn sgen
   "Generate an Alzabo schema (a Clojure map, not written to disk) for

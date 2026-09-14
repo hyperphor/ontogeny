@@ -1,14 +1,16 @@
 (ns hyperphor.ontogeny.doc-gen
   "Writes a generated Alzabo schema to disk and renders its HTML doc under
-  resources/public/schema/<slug>/ -- which hyperphor.way.handler's static
-  resource middleware then serves directly, the same iframe-a-generated-doc
-  trick nlq-aact uses for its own schema tab. Requires graphviz on PATH (see
-  Alzabo's README); that's a deploy prerequisite for this app, not just a
-  dev-machine one."
-  (:require [clojure.string :as str]
-            [hyperphor.alzabo.config :as alz-config]
+  hyperphor.ontogeny.paths' local temp-dir root -- hyperphor.ontogeny
+  .handler serves /schema/<slug>/* from there directly (a dynamic
+  filesystem route, not way's classpath-based static middleware, which
+  can't see files written at runtime -- see paths.clj and handler.clj).
+  Requires graphviz on PATH (see Alzabo's README); that's a deploy
+  prerequisite for this app, not just a dev-machine one."
+  (:require [hyperphor.alzabo.config :as alz-config]
             [hyperphor.alzabo.core :as alzabo]
-            [hyperphor.alzabo.output :as alz-output]))
+            [hyperphor.alzabo.output :as alz-output]
+            [hyperphor.ontogeny.paths :as paths]
+            [clojure.string :as str]))
 
 ;; hyperphor.alzabo.config's `the-config` is a single global atom -- do-command
 ;; :documentation reads it mid-render (including shelling out to graphviz),
@@ -32,8 +34,8 @@
   ready to iframe or redirect to."
   [schema domain]
   (let [slug (slug domain)
-        schema-file (str "resources/generated/" slug ".edn")
-        output-dir (str "resources/public/schema/" slug "/")]
+        schema-file (str (paths/generated-file (str slug ".edn")))
+        output-dir (str (paths/schema-file slug) "/")]
     (locking generation-lock
       (alz-output/write-schema schema schema-file)
       (alz-config/set-config! {:source schema-file :output-path output-dir :edge-labels? true})
