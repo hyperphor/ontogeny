@@ -31,13 +31,50 @@
   [domain]
   (str (slugify domain) "-" (Long/toString (System/currentTimeMillis) 36)))
 
+(def ^:private primary-kind-count 5)
+
+(defn- kind-refs
+  "kind -> the set of other kind names its fields directly reference
+  (tuple-typed fields expand to each component). Enum/primitive-typed
+  fields aren't relations, same distinction alzabo.html/kind-relations
+  draws for its own graphviz edges."
+  [{:keys [kinds]} kind]
+  (->> (get-in kinds [kind :fields])
+       vals
+       (mapcat (fn [{:keys [type]}] (if (vector? type) type [type])))
+       (filter kinds)
+       set))
+
+(defn- relation-counts
+  "kind -> number of relation edges touching it, counting both ends (a
+  kind referenced by many others is just as \"primary\" as one with many
+  outgoing reference fields)."
+  [{:keys [kinds] :as schema}]
+  (reduce (fn [counts kind]
+            (reduce (fn [counts ref]
+                      (-> counts (update kind (fnil inc 0)) (update ref (fnil inc 0))))
+                    counts
+                    (kind-refs schema kind)))
+          {}
+          (keys kinds)))
+
+(defn- primary-kinds
+  "schema -> the names of its most-connected kinds (by relation count,
+  descending), for a short at-a-glance summary on the /directory listing."
+  [schema]
+  (->> (relation-counts schema)
+       (sort-by val >)
+       (take primary-kind-count)
+       (mapv key)))
+
 (defn- write-meta!
   "Records a successful generation for the /directory listing -- see
   hyperphor.ontogeny.directory."
-  [slug domain]
+  [slug domain schema]
   (let [f (paths/meta-file (str slug ".edn"))]
     (io/make-parents f)
-    (spit f (pr-str {:slug slug :domain domain :created-at (System/currentTimeMillis)}))))
+    (spit f (pr-str {:slug slug :domain domain :created-at (System/currentTimeMillis)
+                      :primary-kinds (primary-kinds schema)}))))
 
 (defn generate
   "schema (an Alzabo schema map, e.g. from hyperphor.ontogeny.schema-gen/sgen)
@@ -52,7 +89,7 @@
       (alz-output/write-schema schema schema-file)
       (alz-config/set-config! {:source schema-file :output-path output-dir :edge-labels? true})
       (alzabo/do-command :documentation {:schema-file schema-file}))
-    (write-meta! slug domain)
+    (write-meta! slug domain schema)
     (str "/schema/" slug "/index.html")))
 
 (defn schema-zip
