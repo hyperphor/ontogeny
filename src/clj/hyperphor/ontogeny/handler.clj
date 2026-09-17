@@ -7,7 +7,8 @@
             [hyperphor.way.handler :as wh]
             [hyperphor.ontogeny.paths :as paths]
             [hyperphor.ontogeny.schema-gen :as schema-gen]
-            [hyperphor.ontogeny.doc-gen :as doc-gen]))
+            [hyperphor.ontogeny.doc-gen :as doc-gen]
+            [hyperphor.ontogeny.directory :as directory]))
 
 ;;; Generation runs as a background job, polled from the frontend -- Heroku's
 ;;; router hard-kills any request past 30s (H12, not configurable), and a
@@ -64,12 +65,12 @@
           {:status :error :message "Unknown or expired job"})
       (dissoc :created-at)))
 
-;;; doc-gen renders under paths/root (a temp-dir path, see paths.clj); this
-;;; serves it back. way's own static middleware (resource/wrap-resource) is
-;;; classpath-based, so it can never see files written at runtime -- a
-;;; jar's classpath is fixed at build time. This is a plain dynamic route
-;;; reading straight off disk instead, guarded against path traversal.
-;;; Nothing here is expected to survive a dyno restart -- see paths.clj.
+;;; doc-gen renders under paths/root (a config-driven local dir, see
+;;; paths.clj); this serves it back. way's own static middleware
+;;; (resource/wrap-resource) is classpath-based, so it can never see files
+;;; written at runtime -- a jar's classpath is fixed at build time. This is
+;;; a plain dynamic route reading straight off disk instead, guarded
+;;; against path traversal.
 (defn- schema-response
   [rel-path]
   (when (and (not (str/blank? rel-path))
@@ -79,7 +80,9 @@
 (defroutes site-routes
   (GET "/schema/:path{.*}" [path]
     (or (schema-response path)
-        {:status 404 :body "Not found"})))
+        {:status 404 :body "Not found"}))
+  (GET "/directory" []
+    {:status 200 :headers {"Content-Type" "text/html"} :body (directory/page)}))
 
 ;; slug, not a rel-path like schema-response -- no "/" at all, so no
 ;; traversal guard beyond that plus the usual "..".

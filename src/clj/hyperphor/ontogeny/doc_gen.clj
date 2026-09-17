@@ -1,11 +1,13 @@
 (ns hyperphor.ontogeny.doc-gen
   "Writes a generated Alzabo schema to disk and renders its HTML doc under
-  hyperphor.ontogeny.paths' local temp-dir root -- hyperphor.ontogeny
+  hyperphor.ontogeny.paths' local storage root -- hyperphor.ontogeny
   .handler serves /schema/<slug>/* from there directly (a dynamic
   filesystem route, not way's classpath-based static middleware, which
   can't see files written at runtime -- see paths.clj and handler.clj).
-  Requires graphviz on PATH (see Alzabo's README); that's a deploy
-  prerequisite for this app, not just a dev-machine one."
+  Also writes a small metadata sidecar per generation for the /directory
+  listing (see hyperphor.ontogeny.directory). Requires graphviz on PATH
+  (see Alzabo's README); that's a deploy prerequisite for this app, not
+  just a dev-machine one."
   (:require [hyperphor.alzabo.config :as alz-config]
             [hyperphor.alzabo.core :as alzabo]
             [hyperphor.alzabo.output :as alz-output]
@@ -29,6 +31,14 @@
   [domain]
   (str (slugify domain) "-" (Long/toString (System/currentTimeMillis) 36)))
 
+(defn- write-meta!
+  "Records a successful generation for the /directory listing -- see
+  hyperphor.ontogeny.directory."
+  [slug domain]
+  (let [f (paths/meta-file (str slug ".edn"))]
+    (io/make-parents f)
+    (spit f (pr-str {:slug slug :domain domain :created-at (System/currentTimeMillis)}))))
+
 (defn generate
   "schema (an Alzabo schema map, e.g. from hyperphor.ontogeny.schema-gen/sgen)
   and the domain string it was generated from -> the URL path of its
@@ -42,12 +52,13 @@
       (alz-output/write-schema schema schema-file)
       (alz-config/set-config! {:source schema-file :output-path output-dir :edge-labels? true})
       (alzabo/do-command :documentation {:schema-file schema-file}))
+    (write-meta! slug domain)
     (str "/schema/" slug "/index.html")))
 
 (defn schema-zip
   "slug -> zip file bytes of its rendered doc directory (everything under
   paths/schema-file slug), or nil if that slug hasn't been generated (or
-  aged out -- nothing here survives a dyno restart, see paths.clj)."
+  the storage root has been wiped -- see paths.clj)."
   [slug]
   (let [dir (paths/schema-file slug)]
     (when (.isDirectory dir)

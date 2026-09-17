@@ -45,7 +45,8 @@
     [:div.ontogeny-app
      [:div.site-hero
       [:h2 "Ontogeny"]
-      [:p.tagline "Type a domain, get back a generated ontology."]]
+      [:p.tagline "Type a domain, get back a generated ontology."]
+      [:a {:href "/directory"} "Directory"]]
      [domain-form status doc-path]
      (when (= status :error)
        [:div.ontogeny-error error-message])
