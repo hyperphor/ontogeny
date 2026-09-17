@@ -81,12 +81,31 @@
     (or (schema-response path)
         {:status 404 :body "Not found"})))
 
+;; slug, not a rel-path like schema-response -- no "/" at all, so no
+;; traversal guard beyond that plus the usual "..".
+(defn- download-response
+  [slug]
+  (when (and (not (str/blank? slug))
+             (not (str/includes? slug "/"))
+             (not (str/includes? slug "..")))
+    (when-let [zip-bytes (doc-gen/schema-zip slug)]
+      {:status 200
+       :headers {"Content-Type" "application/zip"
+                 "Content-Disposition" (str "attachment; filename=\"" slug ".zip\"")}
+       :body (java.io.ByteArrayInputStream. zip-bytes)})))
+
 (defroutes api-routes
   (context "/api/ontogeny" []
     (GET "/generate" [domain extra provider model]
       (wh/content-response (generate-endpoint domain extra provider model)))
     (GET "/status" [job-id]
-      (wh/content-response (status-endpoint job-id)))))
+      (wh/content-response (status-endpoint job-id)))
+    ;; Not wrapped in wh/content-response -- that's for transit API replies,
+    ;; this is a raw binary Ring response (plain browser navigation via an
+    ;; <a href>, not an ajax call).
+    (GET "/download" [slug]
+      (or (download-response slug)
+          {:status 404 :body "Not found"}))))
 
 ;;; Warning: do not `(def app ...)` -- config isn't necessarily loaded yet at
 ;;; compile time (same caveat as okc/eli/nlq-aact's handler.clj). wrap-file-info

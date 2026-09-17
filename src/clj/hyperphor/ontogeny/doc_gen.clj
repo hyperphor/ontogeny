@@ -10,7 +10,9 @@
             [hyperphor.alzabo.core :as alzabo]
             [hyperphor.alzabo.output :as alz-output]
             [hyperphor.ontogeny.paths :as paths]
-            [clojure.string :as str]))
+            [clojure.java.io :as io]
+            [clojure.string :as str])
+  (:import [java.util.zip ZipEntry ZipOutputStream]))
 
 ;; hyperphor.alzabo.config's `the-config` is a single global atom -- do-command
 ;; :documentation reads it mid-render (including shelling out to graphviz),
@@ -41,3 +43,20 @@
       (alz-config/set-config! {:source schema-file :output-path output-dir :edge-labels? true})
       (alzabo/do-command :documentation {:schema-file schema-file}))
     (str "/schema/" slug "/index.html")))
+
+(defn schema-zip
+  "slug -> zip file bytes of its rendered doc directory (everything under
+  paths/schema-file slug), or nil if that slug hasn't been generated (or
+  aged out -- nothing here survives a dyno restart, see paths.clj)."
+  [slug]
+  (let [dir (paths/schema-file slug)]
+    (when (.isDirectory dir)
+      (let [baos (java.io.ByteArrayOutputStream.)
+            base (.toPath dir)]
+        (with-open [zos (ZipOutputStream. baos)]
+          (doseq [f (file-seq dir)
+                  :when (.isFile f)]
+            (.putNextEntry zos (ZipEntry. (str (.relativize base (.toPath f)))))
+            (io/copy f zos)
+            (.closeEntry zos)))
+        (.toByteArray baos)))))

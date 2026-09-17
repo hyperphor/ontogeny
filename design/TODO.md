@@ -1,16 +1,24 @@
-# ontogeny.hyperphor.com not working
+# Download
 
-Even though https://ontogeny-c6752993a720.herokuapp.com/ is. 
+Order-0 persistence
 
-Maybe I screwed up the DNS?
+DONE, but should have a schema-only version
 
-Ah http://ontogeny.hyperphor.com/ works, the https: form doesnt
+And maybe an export-to-some-standard format, like RDFS? Or JSON schema. Well that is a whole other bucket of worms.
 
+JSON schema would be esptecially useful for LLM generation, you can pass it those. Hm. 
 
-# Doesn't work at all on heroku
+# Some way to generatae instances
 
-Because it writes files and that is always a stretch.
-I've figured this out before, you can write temp files I think.
+Didn't I already write the guts of this? I remember generating a lot of fake jazz musicians...and real ones...oh fuck
+man where did I do that? 
+
+OK that was string based, can't find it but it's trivial to ask an LLM for a list of entities, real or fake.
+
+In fact should be an ellum primitive
+
+# Size control
+eg a slider in number of classes.
 
 # Persistence
 
@@ -19,10 +27,9 @@ I've figured this out before, you can write temp files I think.
 - links should be shareable eg http://ontogeny.hyperphor.com/genetic_disorders
 
 
+# Ought be able to generate enums
 
-# Refinement
-
-Espectially. generating instances. And in some cases, enums?
+Since they are in the Alzabno spe after all
 
 # Needs some explanatory text
 

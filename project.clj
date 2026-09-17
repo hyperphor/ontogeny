@@ -11,7 +11,7 @@
                  [com.hyperphor/ellum "0.1.3"]
                  ;; NOT excluding hiccup, unlike okc/nlflame's pin -- Alzabo's
                  ;; HTML doc generation (what this whole app is for) needs it.
-                 [com.hyperphor/alzabo "1.3.6"]
+                 [com.hyperphor/alzabo "1.3.8"]
                  [com.taoensso/timbre "6.7.1"]
                  [environ "1.2.0"]
                  ;; Direct dep, NOT :dev-profile-only -- `lein uberjar` activates
