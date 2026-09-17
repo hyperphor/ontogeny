@@ -1,3 +1,11 @@
+# IDEA: iterative refinement
+Using text, so no fancy UI required. "Add a foo class" "merge  class foo and bar"
+
+Problem is cycle is slow, but maybe not if not generating the whole thing. gv display not really deisgned for iteration (not stable)
+
+Note: if we build The Master Repl then some of this just falls out. Should do that.
+
+
 # Download
 
 Order-0 persistence
@@ -18,10 +26,7 @@ Can also be done through "extra" box
 
 # Persistence
 
-- buttton to persist your ontology
-- list with links
-- links should be shareable eg http://ontogeny.hyperphor.com/genetic_disorders
-
+See separeate doc
 
 # Ought be able to generate enums
 
