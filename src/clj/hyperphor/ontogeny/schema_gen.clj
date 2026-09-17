@@ -111,6 +111,106 @@ IMPORTANT: whenever a field represents a concept that exists as a kind in the li
         (dump-failure! :schema domain request e)
         (throw e)))))
 
+
+
+;;; Adds documentation strings to kinds/attributes/enum values that lack them.
+;;; Ported from hyperphor.alzabo.schema-gen-llm/add-doc (alzabo repo), fixed to use
+;;; this file's :provider/:content-based request shape instead of the raw-OpenAI
+;;; shape that prototype still reads (which throws under the current ellum API).
+;;;
+;;; Returns the LLM's raw text response, not a parsed/merged schema: the model
+;;; tends to elide unchanged parts with "..." rather than echo back complete
+;;; valid EDN, so the result needs human review/hand-merging, same as the
+;;; prototype. A more robust extractor doesn't fix that underlying problem.
+(defn add-doc
+  "Given an existing schema and a domain description, ask the LLM to add
+  documentation to each kind/attribute/enum value that doesn't already have
+  one. Returns raw LLM text (see note above) for manual review, not a schema."
+  [domain schema & {:keys [provider model] :or {provider default-provider}}]
+  (let [query (format "Given this Alzabo schema for the %s domain, add documentation to each kind, attribute, and enum value if it doesn't already exist" domain)
+        request (cond-> {:provider provider
+                         :system system-prompt
+                         :messages [{:role :user :content query}
+                                    {:role :user :content (str "schema: " (print-str schema))}]}
+                  model (assoc :model model))]
+    (try
+      (:content (llm/complete request))
+      (catch Exception e
+        (dump-failure! :doc domain request e)
+        (throw e)))))
+
+(defn improve-doc
+  "Given an existing schema and a domain description, ask the LLM to rewrite
+  each kind/attribute/enum value's documentation to be more human-readable.
+  Returns raw LLM text (see add-doc's note) for manual review, not a schema."
+  [domain schema & {:keys [provider model] :or {provider default-provider}}]
+  (let [query (format "Given this Alzabo schema for the %s domain, improve the documentation string for each kind, attribute, and enum value, make it more human readable. Return a new improved schema in the same format" domain)
+        request (cond-> {:provider provider
+                         :system system-prompt
+                         :messages [{:role :user :content query}
+                                    {:role :user :content (str "schema: " (print-str schema))}]}
+                  model (assoc :model model))]
+    (try
+      (:content (llm/complete request))
+      (catch Exception e
+        (dump-failure! :improve-doc domain request e)
+        (throw e)))))
+
+;;; Adds :icon to kinds where one is obviously fitting. Conservative: kinds already
+;;; iconed are excluded from the prompt (never overwritten), and the model is asked
+;;; to skip kinds with no good emoji rather than force one onto everything.
+;;; Ported from hyperphor.alzabo.schema-gen-llm/add-icons (alzabo repo). Unlike
+;;; add-doc/improve-doc, this asks the LLM for a small {kind icon} map, not the
+;;; whole schema back, so there's nothing large for it to truncate with "..." --
+;;; extract-clojure-code's fenced-or-bare handling is all that's needed here,
+;;; no extra shape-normalization (the alzabo prototype did its own ad hoc
+;;; sequential?/first check against llme/extract-edn directly; not needed here).
+(defn- propose-icons
+  "Ask the LLM for a {kind-keyword icon-string} map, one entry per kind (from
+  schema's :kinds lacking :icon) where an obvious emoji fits. Returns that map
+  (may be smaller than the input, or empty)."
+  [domain schema provider model]
+  (let [candidates (into {} (keep (fn [[k v]] (when-not (:icon v) [k (:doc v)]))) (:kinds schema))
+        query (u/tx "Given this list of entity kinds (kind name to short description) for a {{domain}} domain Alzabo schema, propose a single emoji as an :icon for ONLY the kinds where an obvious, widely-recognized emoji exists.
+Be conservative — it's expected and fine to skip most kinds. Skip any kind where no emoji fits well, where the fit is a stretch, or where it would just be decorative noise.
+Return ONLY a Clojure map from kind keyword to a single emoji character string, e.g. {:person \"🧑\" :venue \"📍\"}. Omit every kind you're skipping — do not include them with nil or empty values.")
+        request (cond-> {:provider provider
+                         :system system-prompt
+                         :messages [{:role :user :content query}
+                                    {:role :user :content (str "kinds: " (pr-str candidates))}]}
+                  model (assoc :model model))]
+    (when (seq candidates)
+      (try
+        (let [icons (-> (llm/complete request) :content extract-clojure-code)]
+          (if (map? icons)
+            icons
+            (throw (ex-info "propose-icons: LLM did not return an icon map" {:icons icons}))))
+        (catch Exception e
+          (dump-failure! :icons domain request e)
+          (throw e))))))
+
+(defn merge-icons
+  "Merge a {kind icon} map into schema's :kinds, skipping kinds that don't exist,
+  already have an :icon, or whose proposed icon isn't a short string. Pure, no
+  LLM call -- the reliable half of add-icons, kept separately testable."
+  [schema icons]
+  (reduce (fn [schema [kind icon]]
+            (if (and (contains? (:kinds schema) kind)
+                     (not (get-in schema [:kinds kind :icon]))
+                     (string? icon)
+                     (<= 1 (count icon) 8))
+              (assoc-in schema [:kinds kind :icon] icon)
+              schema))
+          schema
+          icons))
+
+(defn add-icons
+  "Given an existing schema and a domain description, propose and merge :icon
+  values (single emoji) for kinds that lack one, conservatively -- not every
+  kind gets one. Standalone step, like add-doc; not part of sgen's pipeline."
+  [domain schema & {:keys [provider model] :or {provider default-provider}}]
+  (merge-icons schema (propose-icons domain schema provider model)))
+
 (defn sgen
   "Generate an Alzabo schema (a Clojure map, not written to disk) for
   `domain`, a short domain-description string. `:extra` is optional
@@ -120,6 +220,8 @@ IMPORTANT: whenever a field represents a concept that exists as a kind in the li
   is ported from -- known gap carried over as-is: it doesn't generate
   subtype/extends relations."
   [domain & {:keys [extra provider model] :or {extra "" provider default-provider}}]
-  (let [kinds-map (generate-kinds domain extra provider model)]
-    (prn :kinds kinds-map)
-    (generate-schema-from-kinds domain kinds-map extra provider model)))
+  (let [kinds-map (generate-kinds domain extra provider model)
+        _ (prn :kinds kinds-map)
+        schema (generate-schema-from-kinds domain kinds-map extra provider model)]
+    ;; TODO add-icons probably should be optional
+    (add-icons domain schema extra provider model)))

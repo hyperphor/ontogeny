@@ -10,15 +10,11 @@ JSON schema would be esptecially useful for LLM generation, you can pass it thos
 
 # Some way to generatae instances
 
-Didn't I already write the guts of this? I remember generating a lot of fake jazz musicians...and real ones...oh fuck
-man where did I do that? 
-
-OK that was string based, can't find it but it's trivial to ask an LLM for a list of entities, real or fake.
-
-In fact should be an ellum primitive
+See alzabo/datagen, that should probably be ported here, and exposed somehow
 
 # Size control
 eg a slider in number of classes.
+Can also be done through "extra" box
 
 # Persistence
 
