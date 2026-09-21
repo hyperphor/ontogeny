@@ -78,6 +78,7 @@
   (let [query (u/tx "List all significant entity types (kinds) needed for a {{domain}} domain schema. {{extra}}
 Include not just the main entities but also supporting types that are often lazily represented as strings — things like anatomical parts, material types, classifications, controlled vocabularies, etc. that benefit from being first-class entities with their own attributes.
 Return ONLY a Clojure map (no prose) of keyword kind-names to brief description strings.
+Avoid spaces in keywords.
 Example: {:Fossil \"A preserved specimen\" :AnatomicalPart \"A body part or skeletal element\" :Taxon \"A taxonomic unit\"}")
         request (cond-> {:provider provider
                          :system system-prompt
@@ -97,6 +98,7 @@ Example: {:Fossil \"A preserved specimen\" :AnatomicalPart \"A body part or skel
         query (u/tx "Create a complete Alzabo schema for the {{domain}} domain using exactly these kinds: {{kinds-list}}.
 For each kind, define its fields with :type, :cardinality (when :many), :doc, and for string fields :examples with 2-3 representative values.
 IMPORTANT: whenever a field represents a concept that exists as a kind in the list above, use a reference type (the kind keyword) rather than :string.
+Avoid spaces in keywords.
 {{extra}}")
         request (cond-> {:provider provider
                          :system system-prompt
