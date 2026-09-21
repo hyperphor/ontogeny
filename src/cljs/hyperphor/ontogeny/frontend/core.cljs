@@ -6,8 +6,14 @@
             [hyperphor.way.ui.init :as init]
             [hyperphor.ontogeny.frontend.events]))
 
+(defn- slug-from-doc-path
+  "\"/schema/<slug>/index.html\" -> \"<slug>\", for the download link."
+  [doc-path]
+  (when doc-path
+    (second (re-matches #"/schema/([^/]+)/.*" doc-path))))
+
 (defn- domain-form
-  [status]
+  [status doc-path]
   [:div.ontogeny-form
    [:label "Domain"
     [:input {:type "text"
@@ -24,7 +30,12 @@
      [:option {:value "openai"} "OpenAI"]]]
    [:button {:disabled (= status :pending)
              :on-click #(rf/dispatch [:ontogeny/generate])}
-    (if (= status :pending) "Generating… (kinds, then fields, then rendering — usually 30-60s)" "Generate schema")]])
+     (if (= status :pending) "Generating… (kinds, then fields, then rendering — usually 30-60s)" "Generate schema")]
+   (if (= status :done)
+     [:button {:on-click #(set! (.-location js/window)
+                                 (str "/api/ontogeny/download?slug=" (slug-from-doc-path doc-path)))}
+      "Download"]
+     "Can take a couple of minutes, be patient")])
 
 (defn app-ui
   []
@@ -34,8 +45,9 @@
     [:div.ontogeny-app
      [:div.site-hero
       [:h2 "Ontogeny"]
-      [:p.tagline "Type a domain, get back a generated ontology."]]
-     [domain-form status]
+      [:p.tagline "Type a domain, get back a generated ontology."]
+      [:a {:href "/directory"} "Directory"]]
+     [domain-form status doc-path]
      (when (= status :error)
        [:div.ontogeny-error error-message])
      (when (= status :done)
